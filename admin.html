@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Админка · Аркада друзей</title>
+<style>
+:root{--bg:#120b08;--c:#1b120d;--b:#3b271b;--tx:#f3e6d8;--hd:#38e8d0;--ac:#ff4fa3;--y:#ffd23f;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 system-ui,sans-serif;padding:16px;display:flex;justify-content:center}
+.box{width:min(100%,640px);background:var(--c);border:2px solid var(--b);border-radius:14px;padding:16px}
+h1{margin:0 0 12px;font-size:18px;color:var(--hd)}h2{margin:16px 0 8px;font-size:15px;color:var(--y)}
+input,select,button{font:inherit;padding:9px 12px;border-radius:8px;border:2px solid var(--b);background:#0d0705;color:var(--tx)}
+input{width:100%;margin:4px 0}button{cursor:pointer;background:#2a1a12}button:hover{border-color:var(--hd)}
+button.d{border-color:#8f2a2a;color:#ff9a8f}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.tabs button.on{background:var(--hd);color:#0b1511;border-color:var(--hd)}
+.row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--b);flex-wrap:wrap}.row .n{flex:1;min-width:120px;word-break:break-all}.row small{color:#9c8878}
+.msg{min-height:1.5em;color:var(--y);margin:8px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.st{background:#0d0705;border-radius:8px;padding:12px;text-align:center}.st b{display:block;font-size:24px;color:var(--hd)}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+</style></head><body>
+<div class="box">
+<h1>Админка · Аркада друзей</h1>
+<div id="login"><input id="em" type="email" placeholder="Почта админа" autocomplete="username"><input id="pw" type="password" placeholder="Пароль" autocomplete="current-password"><button id="go">Войти</button></div>
+<div id="app" hidden>
+ <div class="top"><span id="who"></span><button id="out">Выйти</button></div>
+ <div class="tabs" id="tabs"></div><div class="msg" id="msg"></div><div id="view"></div>
+</div></div>
+<script>
+const U='https://yqunjcpjvordkehluybf.supabase.co',K='sb_publishable_32-P7r86u-CzryzR3ZI19A_GWyuWA3e';
+const GN=['Звёзды','Змейка','Прыжок','Гонка','Шарик','Лови друга','Звездолёт','Повтори','Пинг-понг','Крестики','Морской бой','Шашки','Пакман'],GK='skfrbwxmptnca',DN=['Легко','Средне','Сложно'];
+const $=id=>document.getElementById(id);let jwt='',email='';
+try{jwt=sessionStorage.getItem('adm-jwt')||'';email=sessionStorage.getItem('adm-em')||''}catch(e){}
+function el(t,p,...k){const e=document.createElement(t);if(p)for(const a in p){if(a==='on')for(const v in p.on)e.addEventListener(v,p.on[v]);else if(a==='cls')e.className=p[a];else e[a]=p[a]}for(const c of k)e.append(c);return e}
+const say=t=>{$('msg').textContent=t||''};
+function out(){jwt='';try{sessionStorage.removeItem('adm-jwt')}catch(e){}$('app').hidden=true;$('login').hidden=false}
+async function rpc(fn,a){const r=await fetch(U+'/rest/v1/rpc/'+fn,{method:'POST',headers:{apikey:K,Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:JSON.stringify(a||{})});
+ if(r.status===401||r.status===403){out();throw new Error('Сессия истекла или нет прав. Войди заново.')}
+ if(!r.ok){let m='Ошибка '+r.status;try{const j=await r.json();m=j.message==='forbidden'?'Нет прав админа':(j.message||m)}catch(e){}throw new Error(m)}return r.json()}
+const fd=s=>s?new Date(s).toLocaleString('ru-RU'):'—';
+async function login(){const m=$('em').value.trim(),p=$('pw').value;if(!m||!p)return;$('go').disabled=true;
+ try{const r=await fetch(U+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:K,'Content-Type':'application/json'},body:JSON.stringify({email:m,password:p})});
+  if(!r.ok)throw new Error('Неверная почта или пароль');jwt=(await r.json()).access_token;email=m;
+  await rpc('adm_stats');try{sessionStorage.setItem('adm-jwt',jwt);sessionStorage.setItem('adm-em',m)}catch(e){}$('pw').value='';open()}
+ catch(e){jwt='';alert(e.message)}$('go').disabled=false}
+const VIEWS={
+ async 'Статистика'(v){const s=await rpc('adm_stats');const g=el('div',{cls:'grid'});[['Аккаунтов',s.accounts],['Новых за неделю',s.new_week],['Мировых рекордов',s.scores],['Комнат онлайн',s.rooms]].forEach(([n,x])=>g.append(el('div',{cls:'st'},el('b',{textContent:x}),n)));v.append(g)},
+ async 'Аккаунты'(v){const a=await rpc('adm_accounts');v.append(el('div',{textContent:'Всего: '+a.length}));
+  a.forEach(x=>{const r=el('div',{cls:'row'},el('div',{cls:'n'},el('b',{textContent:x.shown}),el('br'),el('small',{textContent:'создан '+fd(x.created_at)+' · был '+fd(x.updated_at)})));
+   r.append(el('button',{textContent:'Новый пароль',on:{click:async()=>{const p=prompt('Новый пароль для '+x.shown+' (от 4 символов):');if(!p)return;try{await rpc('adm_set_pw',{n:x.nick,p});say('Пароль для '+x.shown+' изменён. Все его входы сброшены.')}catch(e){say(e.message)}}}}));
+   r.append(el('button',{cls:'d',textContent:'Удалить',on:{click:async()=>{if(prompt('Удалить аккаунт и рекорды? Введи ник «'+x.nick+'» для подтверждения')!==x.nick)return;try{await rpc('adm_del_account',{n:x.nick});say('Аккаунт удалён');r.remove()}catch(e){say(e.message)}}}}));v.append(r)})},
+ async 'Рекорды'(v){const sg=el('select'),sd=el('select');GN.forEach((n,i)=>sg.append(el('option',{value:GK[i],textContent:n})));DN.forEach((n,i)=>sd.append(el('option',{value:i,textContent:n})));
+  const box=el('div'),load=async()=>{box.replaceChildren();try{const a=await rpc('adm_scores',{g:sg.value,d:+sd.value});if(!a.length)box.append('Пусто');
+   a.forEach((x,i)=>{const r=el('div',{cls:'row'},el('div',{cls:'n',textContent:(i+1)+'. '+x.shown}),el('b',{textContent:x.score}));
+    r.append(el('button',{cls:'d',textContent:'Удалить',on:{click:async()=>{if(!confirm('Удалить рекорд '+x.score+' у '+x.shown+'?'))return;try{await rpc('adm_del_score',{n:x.nick,g:x.game,d:x.diff});r.remove();say('Рекорд удалён')}catch(e){say(e.message)}}}}));box.append(r)})}catch(e){say(e.message)}};
+  sg.onchange=sd.onchange=load;v.append(el('div',{cls:'row'},sg,sd),box);await load()},
+ async 'Комнаты'(v){const s=await rpc('adm_stats');v.append(el('p',{textContent:'Сейчас комнат в базе: '+s.rooms}),el('button',{cls:'d',textContent:'Удалить все комнаты',on:{click:async()=>{if(!confirm('Удалить все комнаты? Идущие онлайн-партии прервутся.'))return;try{await rpc('adm_clear_rooms');say('Комнаты удалены');show('Комнаты')}catch(e){say(e.message)}}}}))}
+};
+async function show(n){say('');document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.textContent===n));const v=$('view');v.replaceChildren('Загрузка...');
+ try{const w=el('div');await VIEWS[n](w);v.replaceChildren(w)}catch(e){v.replaceChildren();say(e.message)}}
+function open(){$('login').hidden=true;$('app').hidden=false;$('who').textContent=email;const t=$('tabs');t.replaceChildren();Object.keys(VIEWS).forEach(n=>t.append(el('button',{textContent:n,on:{click:()=>show(n)}})));show('Статистика')}
+$('go').onclick=login;$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('out').onclick=out;
+if(jwt)rpc('adm_stats').then(open).catch(()=>{});
+</script></body></html>
